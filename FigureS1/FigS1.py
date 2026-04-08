@@ -7,19 +7,16 @@ Created on Thu Apr 21 11:53:49 2022
 
 import numpy as np
 from scipy.integrate import odeint
-import pandas as pd
-from scipy import stats
 import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 matplotlib.rcParams.update({'font.size': 18})
 import matplotlib.pyplot as plt
-from scipy.stats import kendalltau
 
 #parameters
-a = .014 #decay, with overlap = .03 vs. no overlap 1
-b = .003 #self excitation, with overlap = .02 vs. no overlap .2
+a = .014 #decay, 70 ms longer time constant
+b = .003 #self excitation
 c = a #excitation from other neurons in the same population, needs this relationship
 e = a-b #inhibition from neuron at same location in opposite population, needs this relationship
 f  = .2
@@ -61,7 +58,7 @@ for i in range(1, neurons):
 
 
 
-def P_pursuitonly(t): #position gating signal for saccade
+def P_pursuitonly(t): #position gating signal for pursuit only variant
     pos = np.zeros((neurons, ))
     if t< pursuit_start: #1080:
         i0 = 0 #initial position
@@ -73,7 +70,7 @@ def P_pursuitonly(t): #position gating signal for saccade
     pos[i0] = T+externalI
     return np.concatenate((pos, pos))
 
-def I_pursuitonly(t, coh1, coh2):
+def I_pursuitonly(t, coh1, coh2): #motion pulses for pursuit only variant
     if coh1>0:
         Lweight1 = coh1
         Lweight2 = coh2
@@ -95,7 +92,7 @@ def I_pursuitonly(t, coh1, coh2):
         IR = np.zeros((neurons,))
     return np.concatenate((IL, IR))
 
-def P_saccadeandpursuit(t):
+def P_saccadeandpursuit(t): #gating signal for saccade and pursuit variant
     pos = np.zeros((neurons, ))
     if t<saccade_start:#t<780:
         i0 = 0 # initial position
@@ -104,17 +101,15 @@ def P_saccadeandpursuit(t):
         saccade_end = saccade_start+10
         diff = (saccade_end - saccade_start)/10
         i0 = min(int(np.floor(t-saccade_start)/diff), 9) #need to account for extra time before pursuit
-        #i0 = 9 #new position
-    elif (t>spursuit_start) and (t<spursuit_end): #(t>1550) and (t<2300):
+    elif (t>spursuit_start) and (t<spursuit_end):
         diff = (spursuit_end - spursuit_start)/10
         i0 = 9 - int(np.floor(t-spursuit_start)/diff)
-        #i0 = 9-int(np.floor((t-1550)/75)) #back to initial position
     else:
         i0 = 0
     pos[i0] = T+externalI
     return np.concatenate((pos, pos))
 
-def I_saccadeandpursuit(t, coh1, coh2):
+def I_saccadeandpursuit(t, coh1, coh2): #motion pulses for saccade and pursuit variant
     if coh1>0:
         Lweight1 = coh1
         Lweight2 = coh2
@@ -181,6 +176,7 @@ followerunsumsp = {}
 
 reps = 200
 
+#simulations for pursuit only variant
 for c1 in cohs:
     if c1>0:
         cohs2 = [c for c in cohs if c>=0]
@@ -205,17 +201,7 @@ for c1 in cohs:
     followerunsumpursuit[c1] = np.mean(sols, axis=0)[:, 1:10]
 
     
-    '''
-    plt.figure()
-    plt.imshow(solpursuit.T, aspect = 'auto', interpolation = 'none', cmap = 'jet')
-    plt.ylabel('Neuron')
-    plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
-    plt.xlabel('Time (ms)')
-    cbar = plt.colorbar()
-    cbar.set_label('firing rate (Hz)')
-    plt.title('Pursuit Only, c =' + str(c))
-    '''
-    
+#simulations for saccade and pursuit variant    
 for c1 in cohs:
     if c1>0:
         cohs2 = [c for c in cohs if c>=0]
@@ -240,87 +226,9 @@ for c1 in cohs:
     followerunsumsp[c1] = np.mean(sols, axis=0)[:, 1:10]
 
 
-    '''
-    plt.figure()
-    plt.imshow(solsp.T, aspect = 'auto', interpolation = 'none', cmap = 'jet')
-    plt.ylabel('Neuron')
-    plt.xlabel('Time (ms)')
-    plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
-    cbar = plt.colorbar()
-    cbar.set_label('firing rate (Hz)')
-    plt.title('Saccade and Pursuit, c =' + str(c))
-    '''
+
 colors = {-.64:'#0D8140', -.32:'#11B24D', -.16:'#52BA66', -.08:'#6DC497', -.04:'#A1D7C5', -0.0000000000001:'#D1E8C5', 0.0000000000001:'#FCF9CE', .04:'#FBF39C', .08:'#FEE681', .16:'#FFCC67', .32:'#F8991D', .64:'#ED1F24'}
     
-plt.figure()
-for c in cohs:
-    plt.plot(leaderpursuit[c], label = c, color = colors[c])
-plt.title('Pursuit Only Leaders')
-plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
-
-plt.figure()
-for c in cohs:
-    plt.plot(followerpursuit[c], label = c, color = colors[c])
-plt.title('Pursuit Only Followers')
-plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
-
-plt.figure()
-for c in cohs:
-    plt.plot(leadersp[c], label = c, color = colors[c])
-plt.title('Saccade and Pursuit Leaders')
-plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
-
-plt.figure()
-for c in cohs:
-    plt.plot(followersp[c], label = c, color = colors[c])
-plt.title('Saccade and Pursuit Followers')
-plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
-
-plt.figure()
-for c in cohs:
-    plt.plot(followersp[c][2800:12800], label = c, color = colors[c])
-plt.title('Saccade and Pursuit Followers')
-plt.xticks([0, 500, 1000], ['-50', '0', '50'])
-
-
-#correlation plots for pursuit task
-leadercorrpursuit = np.zeros((1, 32301))
-followercorrpursuit = np.zeros((9, 32301))
-for i, t in enumerate(np.arange(0, 32301)):
-    #if t<1500:
-     #   lower = 0
-    #else:
-     #   lower = t-1500
-    #if t>30801:
-    #    upper = -1
-    #else:
-     #   upper = t+1500
-    #x = [np.mean(leaderpursuit[c][lower:upper]) for c in cohs]
-    x = [leaderpursuit[c][t] for c in cohs]
-    k = kendalltau(x, cohs)
-    if k.pvalue<.05:
-        leadercorrpursuit[:, i] = k.correlation
-    y = [followerunsumpursuit[c][t] for c in cohs]
-    y = np.array(y)
-    ks = [kendalltau(y[:, z], cohs) for z in range(9)]
-    for j in range(9):
-        if ks[j].pvalue <.05:
-            followercorrpursuit[j, i] = ks[j].correlation
-   
-plt.figure()
-plt.imshow(leadercorrpursuit, aspect = 'auto', interpolation = 'none', vmin = -1, vmax = 1) #, cmap = "Greys")
-plt.xticks([0, 1000, 10800, 18900, 24500], ['0', 'p1', 'pursuit', 'fixation T0', 'p2'])
-plt.title('Leader Kendall T')
-plt.colorbar()
-plt.savefig('BioLeaderKendallpursuit-jitterFF.pdf')
-
-plt.figure()
-plt.imshow(followercorrpursuit, aspect = 'auto', interpolation = 'none', vmin = -1, vmax = 1) #, cmap = "Greys")
-plt.xticks([0, 1000, 10800, 18900, 24500], ['0', 'p1', 'pursuit', 'fixation T0', 'p2'])
-plt.title('Follower Kendall T')
-plt.colorbar()
-plt.savefig('BioFollowerKendallpursuit-jitterFF.pdf')
-
 #plots at each event point for pursuit task
 #P1 on
 plt.figure()
@@ -397,38 +305,6 @@ plt.xticks([22500, 24500, 26500, 28500], ['-', 'p2 on', '-', '-'])
 plt.xlim([22500, 28500])
 plt.ylim([-1, 24])
 plt.savefig('Figures/70mspursuit4-followers-jitterFF.pdf')
-
-#correlation plots for saccade pursuit task
-leadercorrsp = np.zeros((1, 32301))
-followercorrsp = np.zeros((9, 32301))
-for i, t in enumerate(np.arange(0, 32301)):
-    x = [leadersp[c][t] for c in cohs]
-    k = kendalltau(x, cohs)
-    if k.pvalue<.05:
-        leadercorrsp[:, i] = k.correlation
-    y = [followerunsumsp[c][t] for c in cohs]
-    y = np.array(y)
-    ks = [kendalltau(y[:, z], cohs) for z in range(9)]
-    for j in range(9):
-        if ks[j].pvalue <.05:
-            followercorrsp[j, i] = ks[j].correlation
-   
-plt.figure()
-plt.imshow(leadercorrsp, aspect = 'auto', interpolation = 'none', vmin = -1, vmax = 1) #, cmap = "Greys")
-plt.xticks([0, 1000, 7800, 15500, 23000, 30000], ['0', 'p1', 'saccade', 'pursuit', 'resume fix', 'p2'])
-plt.title('Leader Kendall T')
-plt.colorbar()
-plt.savefig('BioLeaderKendallsp-jitterFF.pdf')
-
-plt.figure()
-plt.imshow(followercorrsp, aspect = 'auto', interpolation = 'none', vmin = -1, vmax = 1, origin = 'lower') #, cmap = "Greys")
-plt.xticks([0, 1000, 7800, 15500, 23000, 30000], ['0', 'p1', 'saccade', 'pursuit', 'resume fix', 'p2'])
-plt.title('Follower Kendall T')
-plt.colorbar()
-plt.savefig('BioFollowerKendallsp-jitterFF.pdf')
-
-
-
 
 
 #plots at each event point for saccade pursuit task

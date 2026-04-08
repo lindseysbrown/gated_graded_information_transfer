@@ -32,8 +32,7 @@ T = 300 #meets threshold
 externalI = .25 #signal above threshold that will set baseline for integrating around, with overlap I = 1
 
 motionon = 0
-#initialize neural chains (for weird historic reasons there's 17)
-#first 17 neurons in the solution are left population, next 17 is right population
+
 neurons = 10
 
 #set up connection matrix
