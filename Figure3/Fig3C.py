@@ -23,19 +23,18 @@ from skimage.measure import block_reduce
 simulation = 'PSTH', #'HeatmapData'
 
 #parameters
-a = .014 #decay, with overlap = .03 vs. no overlap 1
-b = .003 #self excitation, with overlap = .02 vs. no overlap .2
+a = .1 #decay, with overlap = .03 vs. no overlap 1
+b = .02 #self excitation, with overlap = .02 vs. no overlap .2
 c = a #excitation from other neurons in the same population, needs this relationship
 e = a-b #inhibition from neuron at same location in opposite population, needs this relationship
 f  = .2
 P0 = 40
 baseline = 10
 T = 300 #meets threshold
-externalI = .25 #signal above threshold that will set baseline for integrating around, with overlap I = 1
+externalI = 2.5 #signal above threshold that will set baseline for integrating around, with overlap I = 1
 
 motionon = 0
-#initialize neural chains (for weird historic reasons there's 17)
-#first 17 neurons in the solution are left population, next 17 is right population
+
 neurons = 10
 
 #set up connection matrix
@@ -53,14 +52,16 @@ spursuit_start = 1550
 spursuit_end = 2300
 
 for i in range(neurons):
-    #feedfoward all to all connections
-    for j in range(neurons):
-        if j!=i:
-            W[i, j] = c
-            W[i+neurons, j+neurons]=c
     #inhibitory connections
     W[i+neurons, i] = -e
     W[i, i+neurons] = -e
+    
+for i in range(1, neurons):
+    #local feedfoward connections
+    W[i, i-1] = c
+    W[i+neurons, i-1+neurons] = c
+    W[i-1, i] = c
+    W[i-1+neurons, i+neurons] = c
 
 
 
@@ -104,7 +105,11 @@ def P_saccadeandpursuit(t):
     if t<saccade_start:#t<780:
         i0 = 0 # initial position
     if (t>saccade_start) and (t<spursuit_start):#(t>780) and (t<1550):
-        i0 = 9 #new position
+        #rapid position sweep
+        saccade_end = saccade_start+10
+        diff = (saccade_end - saccade_start)/10
+        i0 = min(int(np.floor(t-saccade_start)/diff), 9) #need to account for extra time before pursuit
+        #i0 = 9 #new position
     elif (t>spursuit_start) and (t<spursuit_end): #(t>1550) and (t<2300):
         diff = (spursuit_end - spursuit_start)/10
         i0 = 9 - int(np.floor(t-spursuit_start)/diff)
@@ -203,6 +208,7 @@ for c1 in cohs:
     leaderpursuit[c1] = np.mean(sols, axis = 0)[:, 0]
     followerpursuit[c1] = np.sum(np.mean(sols, axis=0)[:, 1:10], axis = 1)
     followerunsumpursuit[c1] = np.mean(sols, axis=0)[:, 1:10]
+
     
     '''
     plt.figure()
@@ -238,6 +244,7 @@ for c1 in cohs:
     followersp[c1] = np.sum(np.mean(sols, axis=0)[:, 1:10], axis = 1)   
     followerunsumsp[c1] = np.mean(sols, axis=0)[:, 1:10]
 
+
     '''
     plt.figure()
     plt.imshow(solsp.T, aspect = 'auto', interpolation = 'none', cmap = 'jet')
@@ -248,34 +255,35 @@ for c1 in cohs:
     cbar.set_label('firing rate (Hz)')
     plt.title('Saccade and Pursuit, c =' + str(c))
     '''
+colors = {-.64:'#0D8140', -.32:'#11B24D', -.16:'#52BA66', -.08:'#6DC497', -.04:'#A1D7C5', -0.0000000000001:'#D1E8C5', 0.0000000000001:'#FCF9CE', .04:'#FBF39C', .08:'#FEE681', .16:'#FFCC67', .32:'#F8991D', .64:'#ED1F24'}
     
 plt.figure()
 for c in cohs:
-    plt.plot(leaderpursuit[c], label = c)
+    plt.plot(leaderpursuit[c], label = c, color = colors[c])
 plt.title('Pursuit Only Leaders')
 plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
 
 plt.figure()
 for c in cohs:
-    plt.plot(followerpursuit[c], label = c)
+    plt.plot(followerpursuit[c], label = c, color = colors[c])
 plt.title('Pursuit Only Followers')
 plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
 
 plt.figure()
 for c in cohs:
-    plt.plot(leadersp[c], label = c)
+    plt.plot(leadersp[c], label = c, color = colors[c])
 plt.title('Saccade and Pursuit Leaders')
 plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
 
 plt.figure()
 for c in cohs:
-    plt.plot(followersp[c], label = c)
+    plt.plot(followersp[c], label = c, color = colors[c])
 plt.title('Saccade and Pursuit Followers')
 plt.xticks([0, 10000, 20000, 30000], ['0', '1000', '2000', '3000'])
 
 plt.figure()
 for c in cohs:
-    plt.plot(followersp[c][2800:12800], label = c)
+    plt.plot(followersp[c][2800:12800], label = c, color = colors[c])
 plt.title('Saccade and Pursuit Followers')
 plt.xticks([0, 500, 1000], ['-50', '0', '50'])
 
@@ -309,16 +317,14 @@ plt.imshow(leadercorrpursuit, aspect = 'auto', interpolation = 'none', vmin = -1
 plt.xticks([0, 1000, 10800, 18900, 24500], ['0', 'p1', 'pursuit', 'fixation T0', 'p2'])
 plt.title('Leader Kendall T')
 plt.colorbar()
-plt.savefig('BioLeaderKendallpursuit-jitter.pdf')
+plt.savefig('BioLeaderKendallpursuit-jitterFF.pdf')
 
 plt.figure()
 plt.imshow(followercorrpursuit, aspect = 'auto', interpolation = 'none', vmin = -1, vmax = 1) #, cmap = "Greys")
 plt.xticks([0, 1000, 10800, 18900, 24500], ['0', 'p1', 'pursuit', 'fixation T0', 'p2'])
 plt.title('Follower Kendall T')
 plt.colorbar()
-plt.savefig('BioFollowerKendallpursuit-jitter.pdf')
-
-colors = {-.64:'#0D8140', -.32:'#11B24D', -.16:'#52BA66', -.08:'#6DC497', -.04:'#A1D7C5', -0.0000000000001:'#D1E8C5', 0.0000000000001:'#FCF9CE', .04:'#FBF39C', .08:'#FEE681', .16:'#FFCC67', .32:'#F8991D', .64:'#ED1F24'}
+plt.savefig('BioFollowerKendallpursuit-jitterFF.pdf')
 
 #plots at each event point for pursuit task
 #P1 on
@@ -328,8 +334,8 @@ for c in cohs:
 plt.title('Pursuit Only Leaders')
 plt.xticks([1000, 3000, 5000], ['p1', '-', '-'])
 plt.xlim([500, 5000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit1-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit1-leaders-jitterFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -337,8 +343,8 @@ for c in cohs:
 plt.title('Pursuit Only Followers')
 plt.xticks([1000, 3000, 5000], ['p1', '-', '-'])
 plt.xlim([500, 5000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit1-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit1-followers-jitterFF.pdf')
 
 #pursuit to T0
 plt.figure()
@@ -347,8 +353,8 @@ for c in cohs:
 plt.title('Pursuit Only Leaders')
 plt.xticks([8800, 10800, 12800], ['-', 'pursuit', '-'])
 plt.xlim([8300, 13300])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit2-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit2-leaders-jitterFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -356,8 +362,8 @@ for c in cohs:
 plt.title('Pursuit Only Followers')
 plt.xticks([8800, 10800, 12800], ['-', 'pursuit', '-'])
 plt.xlim([8300, 13300])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit2-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit2-followers-jitterFF.pdf')
 
 #new fixation at T0
 plt.figure()
@@ -366,8 +372,8 @@ for c in cohs:
 plt.title('Pursuit Only Leaders')
 plt.xticks([14900, 16900, 18900, 20900, 22900], ['-', '-', 'fixation t0', '-', '-'])
 plt.xlim([14900, 22900])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit3-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit3-leaders-jitterFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -375,8 +381,8 @@ for c in cohs:
 plt.title('Pursuit Only Followers')
 plt.xticks([14900, 16900, 18900, 20900, 22900], ['-', '-', 'fixation t0', '-', '-'])
 plt.xlim([14900, 22900])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit3-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit3-followers-jitterFF.pdf')
 
 #p2 on
 plt.figure()
@@ -385,8 +391,8 @@ for c in cohs:
 plt.title('Pursuit Only Leaders')
 plt.xticks([22500, 24500, 26500, 28500], ['-', 'p2 on', '-', '-'])
 plt.xlim([22500, 28500])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit4-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit4-leaders-jitterFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -394,8 +400,8 @@ for c in cohs:
 plt.title('Pursuit Only Followers')
 plt.xticks([22500, 24500, 26500, 28500], ['-', 'p2 on', '-', '-'])
 plt.xlim([22500, 28500])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mspursuit4-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mspursuit4-followers-jitterFF.pdf')
 
 #correlation plots for saccade pursuit task
 leadercorrsp = np.zeros((1, 32301))
@@ -417,17 +423,17 @@ plt.imshow(leadercorrsp, aspect = 'auto', interpolation = 'none', vmin = -1, vma
 plt.xticks([0, 1000, 7800, 15500, 23000, 30000], ['0', 'p1', 'saccade', 'pursuit', 'resume fix', 'p2'])
 plt.title('Leader Kendall T')
 plt.colorbar()
-plt.savefig('BioLeaderKendallsp-jitter.pdf')
+plt.savefig('BioLeaderKendallsp-jitterFF.pdf')
 
 plt.figure()
 plt.imshow(followercorrsp, aspect = 'auto', interpolation = 'none', vmin = -1, vmax = 1, origin = 'lower') #, cmap = "Greys")
 plt.xticks([0, 1000, 7800, 15500, 23000, 30000], ['0', 'p1', 'saccade', 'pursuit', 'resume fix', 'p2'])
 plt.title('Follower Kendall T')
 plt.colorbar()
-plt.savefig('BioFollowerKendallsp-jitter.pdf')
+plt.savefig('BioFollowerKendallsp-jitterFF.pdf')
 
 
-colors = {-.64:'#0D8140', -.32:'#11B24D', -.16:'#52BA66', -.08:'#6DC497', -.04:'#A1D7C5', -0.0000000000001:'#D1E8C5', 0.0000000000001:'#FCF9CE', .04:'#FBF39C', .08:'#FEE681', .16:'#FFCC67', .32:'#F8991D', .64:'#ED1F24'}
+
 
 
 #plots at each event point for saccade pursuit task
@@ -438,8 +444,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Leaders')
 plt.xticks([1000, 3000, 5000], ['p1', '-', '-'])
 plt.xlim([500, 5000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit1-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit1-leadersFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -447,8 +453,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Followers')
 plt.xticks([1000, 3000, 5000], ['p1', '-', '-'])
 plt.xlim([500, 5000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit1-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit1-followersFF.pdf')
 
 #saccade
 plt.figure()
@@ -457,8 +463,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Leaders')
 plt.xticks([5800, 7800, 9800], ['-', 'saccade', '-'])
 plt.xlim([5500, 10300])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit2-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit2-leadersFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -466,8 +472,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Followers')
 plt.xticks([5800, 7800, 9800], ['-', 'saccade', '-'])
 plt.xlim([5500, 10300])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit2-followers.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit2-followersFF.pdf')
 
 #pursuit
 plt.figure()
@@ -476,8 +482,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Leaders')
 plt.xticks([13500, 15500, 17500], ['-', 'pursuit', '-'])
 plt.xlim([12500, 18500])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit3-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit3-leadersFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -485,8 +491,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Followers')
 plt.xticks([13500, 15500, 17500], ['-', 'pursuit', '-'])
 plt.xlim([12500, 18500])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit3-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit3-followersFF.pdf')
 
 #resumed fixation
 plt.figure()
@@ -495,8 +501,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Leaders')
 plt.xticks([19000, 21000, 23000, 25000, 27000], ['-', '-', 'resume fix', '-', '-'])
 plt.xlim([19000, 27000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit4-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit4-leadersFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -504,8 +510,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Followers')
 plt.xticks([19000, 21000, 23000, 25000, 27000], ['-', '-', 'resume fix', '-', '-'])
 plt.xlim([19000, 27000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit4-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit4-followersFF.pdf')
 
 #P2 on
 plt.figure()
@@ -514,8 +520,8 @@ for c in cohs:
 plt.title('Saccade and Pursuit Leaders')
 plt.xticks([28000, 30000, 32000, 34000], ['-', 'p2', '-', '-'])
 plt.xlim([28000, 34000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit5-leaders-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit5-leadersFF.pdf')
 
 plt.figure()
 for c in cohs:
@@ -523,5 +529,5 @@ for c in cohs:
 plt.title('Saccade and Pursuit Followers')
 plt.xticks([28000, 30000, 32000, 34000], ['-', 'p2', '-', '-'])
 plt.xlim([28000, 34000])
-plt.ylim([-1, 34])
-plt.savefig('Figures/70mssaccpursuit5-followers-jitter.pdf')
+plt.ylim([-1, 24])
+plt.savefig('Figures/10mssaccpursuit5-followersFF.pdf')

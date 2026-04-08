@@ -20,23 +20,23 @@ from skimage.measure import block_reduce
 simulation = 'PSTH', #'HeatmapData'
 
 #parameters
-a = .014 #decay
-b = .003 #self excitation
+a = .1 #decay, with overlap = .03 vs. no overlap 1
+b = .02 #self excitation, with overlap = .02 vs. no overlap .2
 c = a #excitation from other neurons in the same population, needs this relationship
 e = a-b #inhibition from neuron at same location in opposite population, needs this relationship
 f  = .2
 P0 = 40
 baseline = 10
 T = 300 #meets threshold
-externalI = .25 #signal above threshold that will set baseline for integrating around, with overlap I = 1
+externalI = 2.5 #signal above threshold that will set baseline for integrating around, with overlap I = 1
 
 motionon = 0
+
 neurons = 10
 
 #set up connection matrix
 W = b*np.identity(neurons*2)
 
-#define task times
 global pursuit_start
 global pursuit_end
 global saccade_start
@@ -49,19 +49,21 @@ spursuit_start = 1550
 spursuit_end = 2300
 
 for i in range(neurons):
-    #all to all connections
-    for j in range(neurons):
-        if j!=i:
-            W[i, j] = c
-            W[i+neurons, j+neurons]=c
     #inhibitory connections
     W[i+neurons, i] = -e
     W[i, i+neurons] = -e
+    
+for i in range(1, neurons):
+    #local feedfoward connections
+    W[i, i-1] = c
+    W[i+neurons, i-1+neurons] = c
+    W[i-1, i] = c
+    W[i-1+neurons, i+neurons] = c
 
 
 
 
-def P_pursuitonly(t): #position gating signal for pursuit only task
+def P_pursuitonly(t): #position gating signal for pursuit only variant
     pos = np.zeros((neurons, ))
     if t< pursuit_start: #1080:
         i0 = 0 #initial position
@@ -94,6 +96,7 @@ def I_pursuitonly(t, coh1, coh2): #motion pulses for pursuit only task
         IL = np.zeros((neurons, ))
         IR = np.zeros((neurons,))
     return np.concatenate((IL, IR))
+
 
 def simulate(I, coh1, coh2, P, tmax):
     #reset simulation
@@ -133,9 +136,10 @@ leaderpursuit = {}
 followerpursuit = {}
 followerunsumpursuit = {}
 
+
 reps = 200
 
-#run simulations for pursuit only variant
+#run simulations of the feedforward model on the pursuit only task
 for c1 in cohs:
     if c1>0:
         cohs2 = [c for c in cohs if c>=0]
@@ -154,30 +158,29 @@ for c1 in cohs:
             else:
                 solpursuit = simulate(I_pursuitonly, c1, c2, P_pursuitonly, 3230)
             sols[i*reps+r] = solpursuit
-    
     if simulation == 'PSTH':
         leaderpursuit[c1] = np.mean(sols, axis = 0)[:, 0]
         followerpursuit[c1] = np.sum(np.mean(sols, axis=0)[:, 1:10], axis = 1)
         followerunsumpursuit[c1] = np.mean(sols, axis=0)[:, 1:10]
-
     if simulation == 'HeatmapData':
         sols = block_reduce(sols, block_size = (1, 10, 1), func = np.mean)
         leaderpursuit[c1] = sols[:, :, 0]
         followerpursuit[c1] = sols[:, :, 1:10]
-        followerunsumpursuit[c1] = sols[:, :, 1:10]       
+        followerunsumpursuit[c1] = sols[:, :, 1:10]
 
-#save full data simulations for heatmaps
+
+
+colors = {-.64:'#0D8140', -.32:'#11B24D', -.16:'#52BA66', -.08:'#6DC497', -.04:'#A1D7C5', -0.0000000000001:'#D1E8C5', 0.0000000000001:'#FCF9CE', .04:'#FBF39C', .08:'#FEE681', .16:'#FFCC67', .32:'#F8991D', .64:'#ED1F24'}
+
 if simulation == 'HeatmapData':
-    with open('AAresultsleaderpursuit-full'+str(a)+'.pkl', 'wb') as handle:
+    with open('FFresultsleaderpursuit-full'+str(a)+'.pkl', 'wb') as handle:
         pkl.dump(leaderpursuit, handle)
 
-    with open('AAresultsfollowerpursuit-full'+str(a)+'.pkl', 'wb') as handle:
+    with open('FFresultsfollowerpursuit-full'+str(a)+'.pkl', 'wb') as handle:
         pkl.dump(followerunsumpursuit, handle)
 
-#make the PSTH plots
-if simulation == 'PSTH':
-    colors = {-.64:'#0D8140', -.32:'#11B24D', -.16:'#52BA66', -.08:'#6DC497', -.04:'#A1D7C5', -0.0000000000001:'#D1E8C5', 0.0000000000001:'#FCF9CE', .04:'#FBF39C', .08:'#FEE681', .16:'#FFCC67', .32:'#F8991D', .64:'#ED1F24'}
 
+if simulation == 'PSTH':
     #plots at each event point for pursuit task
     #P1 on
     plt.figure()
@@ -186,8 +189,8 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Leaders')
     plt.xticks([1000, 3000, 5000], ['p1', '-', '-'])
     plt.xlim([500, 5000])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit1-leaders-jitter.pdf')
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit1-leaders-jitterFF.pdf')
 
     plt.figure()
     for c in cohs:
@@ -195,8 +198,8 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Followers')
     plt.xticks([1000, 3000, 5000], ['p1', '-', '-'])
     plt.xlim([500, 5000])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit1-followers-jitter.pdf')
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit1-followers-jitterFF.pdf')
 
     #pursuit to T0
     plt.figure()
@@ -205,8 +208,8 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Leaders')
     plt.xticks([8800, 10800, 12800], ['-', 'pursuit', '-'])
     plt.xlim([8300, 13300])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit2-leaders-jitter.pdf')
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit2-leaders-jitterFF.pdf')
 
     plt.figure()
     for c in cohs:
@@ -214,8 +217,8 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Followers')
     plt.xticks([8800, 10800, 12800], ['-', 'pursuit', '-'])
     plt.xlim([8300, 13300])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit2-followers-jitter.pdf')
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit2-followers-jitterFF.pdf')
 
     #new fixation at T0
     plt.figure()
@@ -224,8 +227,8 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Leaders')
     plt.xticks([14900, 16900, 18900, 20900, 22900], ['-', '-', 'fixation t0', '-', '-'])
     plt.xlim([14900, 22900])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit3-leaders-jitter.pdf')
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit3-leaders-jitterFF.pdf')
 
     plt.figure()
     for c in cohs:
@@ -233,8 +236,8 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Followers')
     plt.xticks([14900, 16900, 18900, 20900, 22900], ['-', '-', 'fixation t0', '-', '-'])
     plt.xlim([14900, 22900])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit3-followers-jitter.pdf')
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit3-followers-jitterFF.pdf')
 
     #p2 on
     plt.figure()
@@ -243,8 +246,8 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Leaders')
     plt.xticks([22500, 24500, 26500, 28500], ['-', 'p2 on', '-', '-'])
     plt.xlim([22500, 28500])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit4-leaders-jitter.pdf')
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit4-leaders-jitterFF.pdf')
 
     plt.figure()
     for c in cohs:
@@ -252,6 +255,5 @@ if simulation == 'PSTH':
     plt.title('Pursuit Only Followers')
     plt.xticks([22500, 24500, 26500, 28500], ['-', 'p2 on', '-', '-'])
     plt.xlim([22500, 28500])
-    plt.ylim([-1, 34])
-    plt.savefig('Figures/70mspursuit4-followers-jitter.pdf')
-
+    plt.ylim([-1, 24])
+    plt.savefig('Figures/10mspursuit4-followers-jitterFF.pdf')
